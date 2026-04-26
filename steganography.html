@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StegoCipher — LSB Steganography</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #11111a;
+    --surface2: #1a1a28;
+    --border: #2a2a40;
+    --accent: #00f5c4;
+    --accent2: #7b5ea7;
+    --accent3: #ff6b6b;
+    --text: #e8e8f0;
+    --text-muted: #7070a0;
+    --glow: 0 0 20px rgba(0,245,196,0.2);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,245,196,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,196,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .noise {
+    position: fixed;
+    inset: 0;
+    opacity: 0.035;
+    pointer-events: none;
+    z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .logo-tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(0,245,196,0.3);
+    padding: 4px 12px;
+    margin-bottom: 20px;
+    animation: fadeIn 0.6s ease;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -2px;
+    line-height: 1;
+    margin-bottom: 14px;
+    animation: slideUp 0.7s ease;
+  }
+
+  h1 span {
+    color: var(--accent);
+    text-shadow: 0 0 30px rgba(0,245,196,0.5);
+  }
+
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 13px;
+    letter-spacing: 1px;
+    animation: fadeIn 1s ease;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 32px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    animation: slideUp 0.5s ease 0.1s both;
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 14px;
+    background: var(--surface);
+    border: none;
+    color: var(--text-muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 1px solid var(--border);
+  }
+
+  .tab-btn:last-child { border-right: none; }
+
+  .tab-btn.active {
+    background: var(--surface2);
+    color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  .tab-btn:hover:not(.active) {
+    color: var(--text);
+    background: var(--surface2);
+  }
+
+  /* Panels */
+  .panel {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .panel.active { display: block; }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    opacity: 0.6;
+  }
+
+  .card-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Inputs */
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  input[type="text"],
+  input[type="password"],
+  textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    padding: 12px 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+    resize: vertical;
+  }
+
+  input[type="text"]:focus,
+  input[type="password"]:focus,
+  textarea:focus {
+    border-color: var(--accent);
+    box-shadow: var(--glow);
+  }
+
+  textarea { min-height: 100px; }
+
+  .field { margin-bottom: 20px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 36px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--bg);
+    position: relative;
+  }
+
+  .upload-zone:hover,
+  .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(0,245,196,0.03);
+    box-shadow: var(--glow);
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+    opacity: 0.5;
+  }
+
+  .upload-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .upload-text strong {
+    color: var(--accent);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+
+  #preview-thumb {
+    max-width: 100%;
+    max-height: 160px;
+    object-fit: contain;
+    border-radius: 2px;
+    margin-top: 12px;
+    display: none;
+  }
+
+  /* Key field */
+  .key-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+  }
+
+  .key-row .field { flex: 1; margin-bottom: 0; }
+
+  .key-toggle {
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .key-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* Capacity bar */
+  .capacity-bar {
+    margin-top: 8px;
+  }
+
+  .capacity-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+
+  .capacity-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s, background 0.3s;
+  }
+
+  .capacity-text {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+
+  /* Button */
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 0;
+  }
+
+  .btn:hover::before { transform: translateX(0); }
+  .btn:hover { color: var(--bg); }
+  .btn span { position: relative; z-index: 1; }
+
+  .btn-danger {
+    border-color: var(--accent3);
+    color: var(--accent3);
+  }
+  .btn-danger::before { background: var(--accent3); }
+  .btn-danger:hover { color: #fff; }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Result */
+  #result-section {
+    display: none;
+    margin-top: 16px;
+    animation: slideUp 0.4s ease;
+  }
+
+  #result-canvas-wrapper {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  #result-canvas {
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+  }
+
+  .result-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .meta-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  .meta-chip .val {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    font-family: 'Syne', sans-serif;
+  }
+
+  .meta-chip .lbl {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: block;
+  }
+
+  /* Decode output */
+  #decoded-output {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    display: none;
+    word-break: break-word;
+    min-height: 60px;
+  }
+
+  #decoded-output.has-content {
+    border-color: var(--accent);
+    box-shadow: var(--glow);
+  }
+
+  /* Status */
+  .status {
+    padding: 12px 16px;
+    border-radius: 2px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    display: none;
+    margin-bottom: 12px;
+  }
+
+  .status.success {
+    background: rgba(0,245,196,0.08);
+    border: 1px solid rgba(0,245,196,0.3);
+    color: var(--accent);
+    display: block;
+  }
+
+  .status.error {
+    background: rgba(255,107,107,0.08);
+    border: 1px solid rgba(255,107,107,0.3);
+    color: var(--accent3);
+    display: block;
+  }
+
+  /* Progress */
+  .progress-wrap {
+    display: none;
+    margin: 12px 0;
+  }
+
+  .progress-wrap.show { display: block; }
+
+  .progress-bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.15s;
+  }
+
+  .progress-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    letter-spacing: 1px;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .result-meta { grid-template-columns: repeat(2, 1fr); }
+    .key-row { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+
+<div class="container">
+  <header>
+    <div class="logo-tag">LSB · Steganography</div>
+    <h1>Stego<span>Cipher</span></h1>
+    <p class="subtitle">Hide messages in plain sight — pixel by pixel</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('encode')"><span>⬛ Encode</span></button>
+    <button class="tab-btn" onclick="switchTab('decode')"><span>🔍 Decode</span></button>
+  </div>
+
+  <!-- ENCODE PANEL -->
+  <div id="panel-encode" class="panel active">
+
+    <div class="card">
+      <div class="card-label">01 · Carrier Image</div>
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="image-input" accept="image/*" onchange="loadImage(event)">
+        <div class="upload-icon">🖼</div>
+        <div class="upload-text">
+          <strong>Drop image or click to upload</strong>
+          PNG recommended · JPG, BMP, WebP accepted
+        </div>
+        <img id="preview-thumb" alt="Preview">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">02 · Secret Message</div>
+      <div class="field">
+        <label>Message to hide</label>
+        <textarea id="secret-text" placeholder="Enter your secret message here..." oninput="updateCapacity()"></textarea>
+      </div>
+      <div class="capacity-bar">
+        <div class="capacity-track">
+          <div class="capacity-fill" id="cap-fill" style="width:0%"></div>
+        </div>
+        <div class="capacity-text" id="cap-text">Load an image to see capacity</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">03 · Secret Key (optional)</div>
+      <div class="key-row">
+        <div class="field">
+          <label>Encryption key — scrambles LSB pixel order</label>
+          <input type="password" id="encode-key" placeholder="Leave empty for no key...">
+        </div>
+        <button class="key-toggle" onclick="toggleKeyVis('encode-key', this)" title="Show/hide key">👁</button>
+      </div>
+    </div>
+
+    <div id="encode-status" class="status"></div>
+
+    <div class="progress-wrap" id="encode-progress">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="encode-progress-fill"></div>
+      </div>
+      <div class="progress-label" id="encode-progress-label">Processing...</div>
+    </div>
+
+    <button class="btn" id="encode-btn" onclick="encodeLSB()">
+      <span>▶ Encode & Generate Image</span>
+    </button>
+
+    <div id="result-section">
+      <div style="height:16px"></div>
+      <div class="card">
+        <div class="card-label">Result</div>
+        <div id="result-canvas-wrapper">
+          <canvas id="result-canvas"></canvas>
+        </div>
+        <div class="result-meta">
+          <div class="meta-chip">
+            <span class="val" id="meta-size">—</span>
+            <span class="lbl">Image Size</span>
+          </div>
+          <div class="meta-chip">
+            <span class="val" id="meta-chars">—</span>
+            <span class="lbl">Chars Hidden</span>
+          </div>
+          <div class="meta-chip">
+            <span class="val" id="meta-key">—</span>
+            <span class="lbl">Key Used</span>
+          </div>
+        </div>
+        <button class="btn" onclick="downloadResult()">
+          <span>⬇ Download Steganographic Image</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECODE PANEL -->
+  <div id="panel-decode" class="panel">
+    <div class="card">
+      <div class="card-label">01 · Encoded Image</div>
+      <div class="upload-zone" id="decode-drop-zone">
+        <input type="file" id="decode-image-input" accept="image/*" onchange="loadDecodeImage(event)">
+        <div class="upload-icon">🔐</div>
+        <div class="upload-text">
+          <strong>Drop encoded image or click to upload</strong>
+          Must be the PNG output from StegoCipher
+        </div>
+        <img id="decode-preview-thumb" alt="Preview" style="max-width:100%;max-height:160px;object-fit:contain;margin-top:12px;display:none;border-radius:2px;">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">02 · Secret Key (if used)</div>
+      <div class="key-row">
+        <div class="field">
+          <label>Enter the same key used during encoding</label>
+          <input type="password" id="decode-key" placeholder="Leave empty if no key was used...">
+        </div>
+        <button class="key-toggle" onclick="toggleKeyVis('decode-key', this)" title="Show/hide key">👁</button>
+      </div>
+    </div>
+
+    <div id="decode-status" class="status"></div>
+
+    <div class="progress-wrap" id="decode-progress">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="decode-progress-fill"></div>
+      </div>
+      <div class="progress-label" id="decode-progress-label">Extracting...</div>
+    </div>
+
+    <button class="btn" id="decode-btn" onclick="decodeLSB()">
+      <span>🔍 Extract Hidden Message</span>
+    </button>
+
+    <div style="height:16px"></div>
+
+    <div class="card" id="decode-result-card" style="display:none">
+      <div class="card-label">Extracted Message</div>
+      <div id="decoded-output"></div>
+    </div>
+  </div>
+
+</div>
+
+<canvas id="work-canvas" style="display:none"></canvas>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let sourceImage = null;
+let decodeImageData = null;
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', (i === 0 && tab === 'encode') || (i === 1 && tab === 'decode'));
+  });
+  document.getElementById('panel-encode').classList.toggle('active', tab === 'encode');
+  document.getElementById('panel-decode').classList.toggle('active', tab === 'decode');
+}
+
+// ─── Drag & drop setup ───────────────────────────────────────────────────────
+function setupDrop(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      handler({ target: { files: [file] } });
+    }
+  });
+}
+setupDrop('drop-zone', 'image-input', loadImage);
+setupDrop('decode-drop-zone', 'decode-image-input', loadDecodeImage);
+
+// ─── Load images ──────────────────────────────────────────────────────────────
+function loadImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      const thumb = document.getElementById('preview-thumb');
+      thumb.src = ev.target.result;
+      thumb.style.display = 'block';
+      document.querySelector('#drop-zone .upload-text').style.display = 'none';
+      document.querySelector('#drop-zone .upload-icon').style.display = 'none';
+      updateCapacity();
+      showStatus('encode-status', '', '');
+      document.getElementById('result-section').style.display = 'none';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadDecodeImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      // Draw to canvas to get pixel data
+      const canvas = document.getElementById('work-canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      decodeImageData = ctx.getImageData(0, 0, img.width, img.height);
+
+      const thumb = document.getElementById('decode-preview-thumb');
+      thumb.src = ev.target.result;
+      thumb.style.display = 'block';
+      document.querySelector('#decode-drop-zone .upload-text').style.display = 'none';
+      document.querySelector('#decode-drop-zone .upload-icon').style.display = 'none';
+      showStatus('decode-status', '', '');
+      document.getElementById('decode-result-card').style.display = 'none';
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─── Capacity ─────────────────────────────────────────────────────────────────
+function updateCapacity() {
+  if (!sourceImage) return;
+  const maxBytes = Math.floor((sourceImage.width * sourceImage.height * 3) / 8) - 4;
+  const text = document.getElementById('secret-text').value;
+  const msgBytes = new TextEncoder().encode(text).length;
+  const pct = Math.min(100, (msgBytes / maxBytes) * 100);
+  document.getElementById('cap-fill').style.width = pct + '%';
+  document.getElementById('cap-fill').style.background =
+    pct > 90 ? 'var(--accent3)' : pct > 70 ? '#f5c800' : 'var(--accent)';
+  document.getElementById('cap-text').textContent =
+    `${msgBytes} / ${maxBytes} bytes used (${pct.toFixed(1)}%)`;
+}
+
+// ─── Key utilities ────────────────────────────────────────────────────────────
+function toggleKeyVis(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+
+// Deterministic shuffle of indices using key (seeded LCG)
+function getShuffledIndices(count, key) {
+  const indices = Array.from({ length: count }, (_, i) => i);
+  if (!key) return indices;
+
+  // Seed from key
+  let seed = 0;
+  for (let i = 0; i < key.length; i++) {
+    seed = (seed * 31 + key.charCodeAt(i)) >>> 0;
+  }
+
+  // Fisher-Yates with LCG
+  function lcg() {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  }
+
+  for (let i = count - 1; i > 0; i--) {
+    const j = Math.floor(lcg() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices;
+}
+
+// ─── Status helpers ───────────────────────────────────────────────────────────
+function showStatus(id, type, msg) {
+  const el = document.getElementById(id);
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function setProgress(fillId, labelId, wrapId, pct, label) {
+  document.getElementById(wrapId).classList.toggle('show', pct >= 0 && pct < 100);
+  if (pct >= 0) {
+    document.getElementById(fillId).style.width = pct + '%';
+    document.getElementById(labelId).textContent = label;
+  }
+}
+
+// ─── ENCODE ───────────────────────────────────────────────────────────────────
+async function encodeLSB() {
+  if (!sourceImage) {
+    showStatus('encode-status', 'error', '✗ Please upload a carrier image first.');
+    return;
+  }
+  const text = document.getElementById('secret-text').value;
+  if (!text.trim()) {
+    showStatus('encode-status', 'error', '✗ Please enter a message to hide.');
+    return;
+  }
+
+  const key = document.getElementById('encode-key').value;
+  const btn = document.getElementById('encode-btn');
+  btn.disabled = true;
+  showStatus('encode-status', '', '');
+
+  // Allow UI to update
+  await sleep(10);
+
+  const canvas = document.getElementById('work-canvas');
+  canvas.width = sourceImage.width;
+  canvas.height = sourceImage.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(sourceImage, 0, 0);
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = imgData.data; // RGBA
+
+  // Build bit array from message
+  const msgBytes = new TextEncoder().encode(text);
+  const len = msgBytes.length;
+
+  // Check capacity
+  const totalChannels = Math.floor(canvas.width * canvas.height * 3);
+  const neededBits = 32 + len * 8; // 4 bytes length header + message
+  if (neededBits > totalChannels) {
+    showStatus('encode-status', 'error', `✗ Image too small. Need ${Math.ceil(neededBits/3)} pixels, have ${canvas.width * canvas.height}.`);
+    btn.disabled = false;
+    return;
+  }
+
+  // Build full bit stream: [32-bit length][message bits]
+  const bits = [];
+
+  // Length header (32 bits, big-endian)
+  for (let shift = 24; shift >= 0; shift -= 8) {
+    const byte = (len >> shift) & 0xFF;
+    for (let b = 7; b >= 0; b--) bits.push((byte >> b) & 1);
+  }
+
+  // Message bits
+  for (const byte of msgBytes) {
+    for (let b = 7; b >= 0; b--) bits.push((byte >> b) & 1);
+  }
+
+  // Build list of usable channel positions (skip alpha)
+  const channelList = [];
+  for (let i = 0; i < pixels.length; i++) {
+    if ((i % 4) !== 3) channelList.push(i); // skip alpha byte
+  }
+
+  // Shuffle channels with key
+  const shuffled = getShuffledIndices(channelList.length, key);
+
+  setProgress('encode-progress-fill', 'encode-progress-label', 'encode-progress', 0, 'Encoding bits...');
+  await sleep(10);
+
+  // Write bits into channels
+  const total = bits.length;
+  for (let i = 0; i < total; i++) {
+    const idx = channelList[shuffled[i]];
+    pixels[idx] = (pixels[idx] & 0xFE) | bits[i]; // Set LSB
+    if (i % 20000 === 0) {
+      setProgress('encode-progress-fill', 'encode-progress-label', 'encode-progress',
+        Math.round((i / total) * 90), `Encoding bit ${i} / ${total}...`);
+      await sleep(0);
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  setProgress('encode-progress-fill', 'encode-progress-label', 'encode-progress', 100, 'Done');
+
+  // Show result
+  const resultCanvas = document.getElementById('result-canvas');
+  resultCanvas.width = canvas.width;
+  resultCanvas.height = canvas.height;
+  resultCanvas.getContext('2d').drawImage(canvas, 0, 0);
+
+  document.getElementById('meta-size').textContent = `${canvas.width}×${canvas.height}`;
+  document.getElementById('meta-chars').textContent = len;
+  document.getElementById('meta-key').textContent = key ? '✓ Yes' : '✗ No';
+
+  document.getElementById('result-section').style.display = 'block';
+  showStatus('encode-status', 'success', `✓ Message encoded successfully into ${len} bytes across ${bits.length} pixels.`);
+  btn.disabled = false;
+  document.getElementById('encode-progress').classList.remove('show');
+}
+
+// ─── DECODE ───────────────────────────────────────────────────────────────────
+async function decodeLSB() {
+  if (!decodeImageData) {
+    showStatus('decode-status', 'error', '✗ Please upload an encoded image first.');
+    return;
+  }
+
+  const key = document.getElementById('decode-key').value;
+  const btn = document.getElementById('decode-btn');
+  btn.disabled = true;
+  showStatus('decode-status', '', '');
+  document.getElementById('decode-result-card').style.display = 'none';
+
+  await sleep(10);
+
+  const pixels = decodeImageData.data;
+
+  // Build channel list
+  const channelList = [];
+  for (let i = 0; i < pixels.length; i++) {
+    if ((i % 4) !== 3) channelList.push(i);
+  }
+
+  const shuffled = getShuffledIndices(channelList.length, key);
+
+  setProgress('decode-progress-fill', 'decode-progress-label', 'decode-progress', 0, 'Reading header...');
+  await sleep(10);
+
+  // Read first 32 bits = message length
+  let lenBits = 0;
+  for (let i = 0; i < 32; i++) {
+    const idx = channelList[shuffled[i]];
+    lenBits = (lenBits << 1) | (pixels[idx] & 1);
+  }
+
+  const msgLen = lenBits >>> 0;
+
+  if (msgLen === 0 || msgLen > channelList.length / 8 - 4) {
+    showStatus('decode-status', 'error', `✗ No valid hidden message found, or wrong key. (Detected length: ${msgLen})`);
+    btn.disabled = false;
+    document.getElementById('decode-progress').classList.remove('show');
+    return;
+  }
+
+  setProgress('decode-progress-fill', 'decode-progress-label', 'decode-progress', 10, `Reading ${msgLen} bytes...`);
+  await sleep(10);
+
+  // Read message bytes
+  const msgBytes = new Uint8Array(msgLen);
+  for (let i = 0; i < msgLen; i++) {
+    let byte = 0;
+    for (let b = 0; b < 8; b++) {
+      const bitIdx = 32 + i * 8 + b;
+      const idx = channelList[shuffled[bitIdx]];
+      byte = (byte << 1) | (pixels[idx] & 1);
+    }
+    msgBytes[i] = byte;
+
+    if (i % 5000 === 0) {
+      setProgress('decode-progress-fill', 'decode-progress-label', 'decode-progress',
+        10 + Math.round((i / msgLen) * 85), `Reading byte ${i} / ${msgLen}...`);
+      await sleep(0);
+    }
+  }
+
+  let decoded;
+  try {
+    decoded = new TextDecoder('utf-8', { fatal: true }).decode(msgBytes);
+  } catch {
+    showStatus('decode-status', 'error', '✗ Could not decode message — data may be corrupted or the wrong key was used.');
+    btn.disabled = false;
+    document.getElementById('decode-progress').classList.remove('show');
+    return;
+  }
+
+  document.getElementById('decode-result-card').style.display = 'block';
+  const out = document.getElementById('decoded-output');
+  out.style.display = 'block';
+  out.className = 'has-content';
+  out.textContent = decoded;
+
+  showStatus('decode-status', 'success', `✓ Successfully extracted ${msgLen} bytes${key ? ' using key' : ''}.`);
+  btn.disabled = false;
+  document.getElementById('decode-progress').classList.remove('show');
+}
+
+// ─── Download ──────────────────────────────────────────────────────────────────
+function downloadResult() {
+  const canvas = document.getElementById('work-canvas');
+  const link = document.createElement('a');
+  link.download = 'stegocipher_output.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Default image (generated canvas placeholder)
+window.onload = () => {
+  // Create a default gradient carrier image
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const grd = ctx.createLinearGradient(0,0,512,512);
+  grd.addColorStop(0, '#1a1a3a');
+  grd.addColorStop(0.5, '#0d2d4a');
+  grd.addColorStop(1, '#1a0d2e');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,512,512);
+  // Add noise
+  for (let i = 0; i < 80000; i++) {
+    const x = Math.random()*512, y = Math.random()*512;
+    const c = Math.floor(Math.random()*80);
+    ctx.fillStyle = `rgba(${c+40},${c+60},${c+100},0.4)`;
+    ctx.fillRect(x,y,1,1);
+  }
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      sourceImage = img;
+      const thumb = document.getElementById('preview-thumb');
+      thumb.src = url;
+      thumb.style.display = 'block';
+      document.querySelector('#drop-zone .upload-text strong').textContent = 'Default carrier loaded · Drop to replace';
+      updateCapacity();
+    };
+    img.src = url;
+  });
+};
+</script>
+</body>
+</html>
